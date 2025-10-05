@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "lldb",
+      "request": "launch",
+      "args": [],
+      "cwd": "/Users/jliang627/Computer-Networks/Project01_Problem",
+      "program": "/Users/jliang627/Computer-Networks/Project01_Problem/build/Debug/outDebug"
+    }
+  ]
+}

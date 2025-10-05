@@ -14,10 +14,10 @@
 
 #define CLIENT_IP "127.0.0.1"
 #define SERVER_IP "127.0.0.1"
-#define SERVER_PORT //code
-#define ROUTER_PORT //code
-#define CLIENT_PORT //code
-#define CLIENTTWO_PORT //code
+#define SERVER_PORT 9000//code
+#define ROUTER_PORT 9001//code
+#define CLIENT_PORT 9002//code
+#define CLIENTTWO_PORT 9003//code
 #define SA struct sockaddr
 
 // ==================== 封包結構定義 ====================
