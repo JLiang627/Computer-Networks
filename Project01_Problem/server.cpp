@@ -138,17 +138,96 @@ void udp_msg_sender(int fd, struct sockaddr* dst){
     }
 }
 
-// ==================== TCP 接收 Thread ====================
-void *tcp_socket(void *argu){
-	
-	//code
-	return NULL;
-}
 
 // ==================== UDP 發送 Thread ====================
 void *udp_socket(void *argu){
+	int server_fd;
+    struct sockaddr_in router_addr;
+
+    // 1. 建立 UDP socket
+    // AF_INET: 使用 IPv4
+    // SOCK_DGRAM: 使用 UDP
+    server_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if(server_fd < 0){
+        perror("create socket fail");
+        return NULL;
+    }
+
+    // 2. 設定 Router 的位址資訊
+    memset(&router_addr, 0, sizeof(router_addr)); // 清空結構體
+    router_addr.sin_family = AF_INET;
+    router_addr.sin_port = htons(ROUTER_PORT); // 指定 Router 的埠號
+    router_addr.sin_addr.s_addr = inet_addr(SERVER_IP); // 指定 Router 的 IP
+
+    // 3. 呼叫發送函式
+    udp_msg_sender(server_fd, (struct sockaddr*)&router_addr);
+    
+    // 4. 關閉 socket
+    close(server_fd);
 	
-	//code
+	return NULL;
+}
+
+// ==================== TCP 接收 Thread ====================
+void *tcp_socket(void *argu){
+	int listen_fd, conn_fd;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t client_addr_len;
+    char buf[PACKET_SIZE];
+    int n;
+
+    // 1. 建立 TCP socket
+    // AF_INET: 使用 IPv4
+    // SOCK_STREAM: 使用 TCP
+    listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (listen_fd < 0) {
+        perror("create socket fail");
+        return NULL;
+    }
+
+    // 2. 綁定 Server 的位址和埠號
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // 監聽任何來源的 IP
+    server_addr.sin_port = htons(SERVER_PORT); // 監聽指定的埠號
+
+    if (bind(listen_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("bind fail");
+        close(listen_fd);
+        return NULL;
+    }
+
+    // 3. 開始監聽
+    // backlog 設為 5，表示最多允許 5 個連線請求排隊
+    if (listen(listen_fd, 5) < 0) {
+        perror("listen fail");
+        close(listen_fd);
+        return NULL;
+    }
+    
+    printf("Server listening on port %d\n", SERVER_PORT);
+
+    // 4. 接受來自 client (經 router) 的連線
+    client_addr_len = sizeof(client_addr);
+    conn_fd = accept(listen_fd, (struct sockaddr*)&client_addr, &client_addr_len);
+    if (conn_fd < 0) {
+        perror("accept fail");
+        close(listen_fd);
+        return NULL;
+    }
+    printf("...server receive ----\n");
+
+    // 5. 迴圈接收資料
+    while ((n = recv(conn_fd, buf, PACKET_SIZE, 0)) > 0) {
+        // 這裡可以加入解開並印出封包內容的程式碼
+        // 為了簡化，我們先只印出接收到的訊息
+        printf("server receive tcp packet %d\n", ++count);
+    }
+    
+    // 6. 關閉 socket
+    close(conn_fd);
+    close(listen_fd);
+	
 	return NULL;
 }
 

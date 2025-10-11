@@ -194,16 +194,76 @@ void rcv_UDPpacket(int fd){
 }
 
 // ==================== TCP 傳送 Thread ====================
+// ==================== TCP 傳送 Thread ====================
 void *tcp_socket(void *argu){
+	int client_fd;
+    struct sockaddr_in router_addr;
+
+    // 1. 建立 TCP socket
+    client_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_fd < 0) {
+        perror("create socket fail");
+        return NULL;
+    }
+
+    // 2. 設定 Router 的位址資訊 (我們要連線的對象)
+    memset(&router_addr, 0, sizeof(router_addr));
+    router_addr.sin_family = AF_INET;
+    router_addr.sin_port = htons(CLIENT_PORT); // Router 用來接收 TCP 的埠號
+    router_addr.sin_addr.s_addr = inet_addr(CLIENT_IP);
+
+    // 3. 連接到 Router
+    if (connect(client_fd, (struct sockaddr*)&router_addr, sizeof(router_addr)) < 0) {
+        perror("connect fail");
+        close(client_fd);
+        return NULL;
+    }
+
+    // 4. 迴圈發送封包
+    int cnt = 0;
+    while(cnt < 20){
+        tcp_msg_sender(client_fd, (struct sockaddr*)&router_addr);
+        sleep(1); // 每秒傳送一次
+        cnt++;
+    }
+
+    // 5. 關閉 socket
+    close(client_fd);
 	
-	//code
 	return NULL;
 }
 
 // ==================== UDP 接收 Thread ====================
+// ==================== UDP 接收 Thread ====================
 void *udp_socket(void *argu){
+	int client_fd;
+    struct sockaddr_in client_addr;
+
+    // 1. 建立 UDP socket
+    client_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if(client_fd < 0){
+        perror("create socket fail");
+        return NULL;
+    }
+    
+    // 2. 綁定 Client 的位址和埠號，以便接收封包
+    memset(&client_addr, 0, sizeof(client_addr));
+    client_addr.sin_family = AF_INET;
+    client_addr.sin_port = htons(CLIENTTWO_PORT); // 綁定自己要監聽的埠號
+    client_addr.sin_addr.s_addr = htonl(INADDR_ANY); // 接收來自任何 IP 的封包
+
+    if(bind(client_fd, (struct sockaddr*)&client_addr, sizeof(client_addr)) < 0){
+        perror("bind fail");
+        close(client_fd);
+        return NULL;
+    }
+    
+    // 3. 呼叫接收函式
+    rcv_UDPpacket(client_fd);
+
+    // 4. 關閉 socket
+    close(client_fd);
 		
-	//code
 	return NULL;
 }
 

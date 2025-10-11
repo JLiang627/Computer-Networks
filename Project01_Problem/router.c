@@ -57,18 +57,123 @@ typedef struct Packet {
 }Packet;
 
 // ==================== TCP 轉發 Thread ====================
-void *tcp_socket(void *argu) {  
+// ==================== TCP 轉發 Thread ====================
+void *tcp_socket(void *argu) {
+    int listen_fd, client_conn_fd, server_fd;
+    struct sockaddr_in router_addr, server_addr, client_addr;
+    socklen_t client_addr_len;
+    char buf[PACKET_SIZE];
+    ssize_t n;
 
-	//code
-	return NULL;    
-}    
+    // --- Part 1: 作為 Server，等待 Client 連線 ---
+
+    // 1. 建立 TCP listening socket
+    listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    // 2. 綁定 Router 用來接收 Client 連線的位址和埠號
+    memset(&router_addr, 0, sizeof(router_addr));
+    router_addr.sin_family = AF_INET;
+    router_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    router_addr.sin_port = htons(CLIENT_PORT); // 監聽 9002
+
+    bind(listen_fd, (struct sockaddr*)&router_addr, sizeof(router_addr));
+
+    // 3. 開始監聽
+    listen(listen_fd, 5);
+
+    // 4. 接受來自 Client 的連線
+    client_addr_len = sizeof(client_addr);
+    client_conn_fd = accept(listen_fd, (struct sockaddr*)&client_addr, &client_addr_len);
+
+
+    // --- Part 2: 作為 Client，連接到 Server ---
+
+    // 5. 建立一個新的 TCP socket 用來連線到 Server
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    // 6. 設定 Server 的位址資訊
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
+    server_addr.sin_port = htons(SERVER_PORT); // Server 的埠號 9000
+
+    // 7. 連接到 Server
+    if (connect(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("connect to server fail");
+        close(client_conn_fd);
+        close(listen_fd);
+        return NULL;
+    }
+
+    // --- Part 3: 在 Client 和 Server 之間轉發資料 ---
+
+    // 8. 迴圈接收並轉發
+    while ((n = recv(client_conn_fd, buf, PACKET_SIZE, 0)) > 0) {
+        printf("get tcp\n");
+        // 將從 client 收到的資料，轉發給 server
+        if (send(server_fd, buf, n, 0) < 0) {
+            perror("send to server fail");
+            break;
+        }
+        printf("send tcp\n");
+    }
+
+    // 9. 關閉所有 sockets
+    close(client_conn_fd);
+    close(server_fd);
+    close(listen_fd);
+	return NULL;
+}
 
 // ==================== UDP 轉發 Thread ====================
-void *udp_socket(void *argu) { 
-		
-	//code
-	return NULL;    
-}    
+// ==================== UDP 轉發 Thread ====================
+void *udp_socket(void *argu) {
+    int router_fd;
+    struct sockaddr_in router_addr, server_addr, client_addr;
+    socklen_t server_addr_len;
+    char buf[BUFF_LEN];
+    ssize_t n;
+
+    // 1. 建立 UDP socket
+    router_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (router_fd < 0) {
+        perror("create socket fail");
+        return NULL;
+    }
+
+    // 2. 綁定 Router 用來接收 Server 封包的位址和埠號
+    memset(&router_addr, 0, sizeof(router_addr));
+    router_addr.sin_family = AF_INET;
+    router_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    router_addr.sin_port = htons(ROUTER_PORT); // 監聽 9001
+
+    if (bind(router_fd, (struct sockaddr*)&router_addr, sizeof(router_addr)) < 0) {
+        perror("bind fail");
+        close(router_fd);
+        return NULL;
+    }
+
+    // 3. 設定要轉發的目的地 Client 的位址資訊
+    memset(&client_addr, 0, sizeof(client_addr));
+    client_addr.sin_family = AF_INET;
+    client_addr.sin_addr.s_addr = inet_addr(CLIENT_IP);
+    client_addr.sin_port = htons(CLIENTTWO_PORT); // Client 的接收埠號 9003
+
+    // 4. 迴圈接收並轉發
+    while (1) {
+        server_addr_len = sizeof(server_addr);
+        n = recvfrom(router_fd, buf, BUFF_LEN, 0, (struct sockaddr*)&server_addr, &server_addr_len);
+        if (n > 0) {
+            printf("get udp\n");
+            // 將收到的封包 (存在 buf 中) 直接轉發給 client
+            sendto(router_fd, buf, n, 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
+            printf("send udp\n");
+        }
+    }
+
+    close(router_fd);
+	return NULL;
+}
 
 // ==================== main ====================
 int main(){
