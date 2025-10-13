@@ -25,10 +25,10 @@ using namespace std;
 
 #define CLIENT_IP "127.0.0.1"
 #define SERVER_IP "127.0.0.1"
-#define SERVER_PORT 9000//code
-#define ROUTER_PORT 9001//code
-#define CLIENT_PORT 9002//code
-#define CLIENTTWO_PORT 9003//code
+#define SERVER_PORT 9000
+#define ROUTER_PORT 9001
+#define CLIENT_PORT 9002
+#define CLIENTTWO_PORT 9003
 #define SA struct sockaddr
 
 // ==================== 封包結構定義 ====================
@@ -74,67 +74,69 @@ typedef struct Packet {
   struct IPHeader ipheader;
   struct UDPHeader udpheader;
   struct MACHeader macheader;
-  char buffer[MTU - 40];
+  char buffer[MTU - 46];//原本設定40
 }Packet;
 
 int count = 0;
 
 // ==================== UDP 封包發送 ====================
 void udp_msg_sender(int fd, struct sockaddr* dst){
-    int payload_size;
-    
-    // ---- MAC Header ----
-    struct MACHeader *machdr = (struct MACHeader *)malloc(sizeof(struct MACHeader));
-    unsigned char sour[] = {0x12,0x34,0x56,0x78,0x90,0x98};
-    unsigned char des[] = {0x21,0x43,0x65,0x87,0x90,0x89}; 
-    memcpy(machdr->sour_mac, sour , sizeof(sour));
-    memcpy(machdr->des_mac, des , sizeof(des));  	
-    machdr->fram_typ = 0x0000; 
-    machdr->crc = 0x00000000;
-     
-    // ---- IP Header ----
-	struct IPHeader *iphdr = (struct IPHeader *)malloc(sizeof(struct IPHeader));
-	iphdr->version_ihl = 0x45;
-	iphdr->total_length = MTU;
-	iphdr->identification = 0xAAAA;
-	iphdr->flags_fragment_offset = 0x4000;
-	iphdr->time_to_live = 100;
-	iphdr->protocol = 0x11; // UDP
-	iphdr->header_checksum = 0;
-	iphdr->source_ip = 0x0A115945;
-	iphdr->destination_ip = 0x0A000301;
-	
-    // ---- UDP Header ----
-	struct UDPHeader *udphdr = (struct UDPHeader *)malloc(sizeof(struct UDPHeader));
-	udphdr->source_port = 10000;
-	udphdr->dest_port = 10010;
-	udphdr->Segment_Length = MTU - 38;
-	udphdr->Checksum = 0; 
-    
-    payload_size = MTU - sizeof(*iphdr) - sizeof(*udphdr) - sizeof(*machdr);
-    
-    char buf[payload_size];
-    for(int i=0 ; i<payload_size ; i++){
-    	buf[i] = 1;
-    }
-    
-    struct Packet *packet = (struct Packet *)malloc(sizeof(struct Packet));
-    packet->ipheader = *iphdr;
-    packet->udpheader = *udphdr;
-    packet->macheader = *machdr;
-       
-    socklen_t len;
-    int cnt=0;
+    char buffer[PACKET_SIZE] = {0}; // 用一個 buffer 來組裝整個封包
+    socklen_t len = sizeof(*dst);
+    int cnt = 0;
 
-    while(cnt<20){     
-    	cnt+=1;   
-        packet->ipheader = *iphdr;
-	    packet->udpheader = *udphdr;
-	    packet->macheader = *machdr;
-        len = sizeof(*dst);
-        sendto(fd, packet, sizeof(*packet), 0, dst, len);
-	    printf("server send UDP packet %d !\n", cnt );
-	    sleep(1);
+    while(cnt <= 20){
+        cnt++;
+        memset(buffer, 0, PACKET_SIZE); // 每次發送前清空 buffer
+
+        // 準備 payload
+        char payload[100];
+        sprintf(payload, "This is UDP packet number %d", cnt);
+        size_t payload_length = strlen(payload);
+
+        // ---- Header 設定 ----
+        MACHeader macHeader;
+        // ... (MAC header 內容設定可以保留您原有的)
+        uint8_t des_mac[] = {0x21,0x43,0x65,0x87,0x90,0x89}; 
+        uint8_t sour_mac[] = {0x12,0x34,0x56,0x78,0x90,0x98};
+        memcpy(macHeader.des_mac, des_mac, 6);
+        memcpy(macHeader.sour_mac, sour_mac, 6);
+        macHeader.fram_typ = htons(0x0800); // IPv4
+        macHeader.crc = 0;
+
+        IPHeader ipHeader;
+        ipHeader.version_ihl = 0x45;
+        ipHeader.type_of_service = 0;
+        ipHeader.total_length = htons(sizeof(IPHeader) + sizeof(UDPHeader) + payload_length);
+        ipHeader.identification = htons(cnt); // 用 cnt 作為識別
+        ipHeader.flags_fragment_offset = htons(0x4000);
+        ipHeader.time_to_live = 64;
+        ipHeader.protocol = IPPROTO_UDP; // Protocol is UDP (17)
+        ipHeader.header_checksum = 0;
+        inet_pton(AF_INET, SERVER_IP, &ipHeader.source_ip);
+        inet_pton(AF_INET, CLIENT_IP, &ipHeader.destination_ip);
+
+        UDPHeader udpHeader;
+        udpHeader.source_port = htons(10000);
+        udpHeader.dest_port = htons(10010);
+        udpHeader.Segment_Length = htons(sizeof(UDPHeader) + payload_length);
+        udpHeader.Checksum = 0;
+
+        // ---- 依序將 Header 和 Payload 複製到 buffer 中 ----
+        int offset = 0;
+        memcpy(buffer + offset, &macHeader, sizeof(MACHeader));
+        offset += sizeof(MACHeader);
+        memcpy(buffer + offset, &ipHeader, sizeof(IPHeader));
+        offset += sizeof(IPHeader);
+        memcpy(buffer + offset, &udpHeader, sizeof(UDPHeader));
+        offset += sizeof(UDPHeader);
+        memcpy(buffer + offset, payload, payload_length);
+        // 計算總長度並發送
+        int total_len = offset + payload_length;
+        sendto(fd, buffer, total_len, 0, dst, len);
+        if (cnt == 21)break;
+        printf("server send UDP packet %d !\n", cnt);
+        sleep(1);
     }
 }
 
@@ -177,8 +179,6 @@ void *tcp_socket(void *argu){
     int n;
 
     // 1. 建立 TCP socket
-    // AF_INET: 使用 IPv4
-    // SOCK_STREAM: 使用 TCP
     listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (listen_fd < 0) {
         perror("create socket fail");
@@ -188,8 +188,8 @@ void *tcp_socket(void *argu){
     // 2. 綁定 Server 的位址和埠號
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // 監聽任何來源的 IP
-    server_addr.sin_port = htons(SERVER_PORT); // 監聽指定的埠號
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr.sin_port = htons(SERVER_PORT);
 
     if (bind(listen_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         perror("bind fail");
@@ -198,15 +198,12 @@ void *tcp_socket(void *argu){
     }
 
     // 3. 開始監聽
-    // backlog 設為 5，表示最多允許 5 個連線請求排隊
     if (listen(listen_fd, 5) < 0) {
         perror("listen fail");
         close(listen_fd);
         return NULL;
     }
     
-    printf("Server listening on port %d\n", SERVER_PORT);
-
     // 4. 接受來自 client (經 router) 的連線
     client_addr_len = sizeof(client_addr);
     conn_fd = accept(listen_fd, (struct sockaddr*)&client_addr, &client_addr_len);
@@ -215,13 +212,30 @@ void *tcp_socket(void *argu){
         close(listen_fd);
         return NULL;
     }
-    printf("...server receive ----\n");
-
-    // 5. 迴圈接收資料
+    
+    // 5. 迴圈接收資料並解析
     while ((n = recv(conn_fd, buf, PACKET_SIZE, 0)) > 0) {
-        // 這裡可以加入解開並印出封包內容的程式碼
-        // 為了簡化，我們先只印出接收到的訊息
-        printf("server receive tcp packet %d\n", ++count);
+        // 計算 Header 的總長度
+        // MAC (18) + IP (20) + TCP (20) = 58 bytes
+        const int header_total_size = sizeof(MACHeader) + sizeof(IPHeader) + sizeof(TCPHeader);
+        
+        // Payload 的長度是總接收長度 n 減去 Header 長度
+        int payload_len = n - header_total_size;
+
+        if (payload_len > 0) {
+            // 從 buffer 中 header 結束的地方開始，就是 payload
+            char *payload_start = buf + header_total_size;
+
+            // 為了安全地印出字串，我們複製 payload 到一個新的、有結尾符的 buffer
+            char payload_str[payload_len + 1];
+            memcpy(payload_str, payload_start, payload_len);
+            payload_str[payload_len] = '\0'; // 加上 C 字串結束符號
+
+            // 依照你的範例格式輸出
+            printf("---server receive---\n");
+            printf("payload : %s\n", payload_str);
+            printf("%d\n", ++count);
+        }
     }
     
     // 6. 關閉 socket

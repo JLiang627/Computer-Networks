@@ -24,10 +24,10 @@ using namespace std;
 
 #define CLIENT_IP "127.0.0.1"
 #define SERVER_IP "127.0.0.1"
-#define SERVER_PORT 9000//code
-#define ROUTER_PORT 9001//code
-#define CLIENT_PORT 9002//code
-#define CLIENTTWO_PORT 9003//code
+#define SERVER_PORT 9000
+#define ROUTER_PORT 9001
+#define CLIENT_PORT 9002
+#define CLIENTTWO_PORT 9003
 
 #define SA struct sockaddr
 
@@ -177,8 +177,7 @@ void rcv_UDPpacket(int fd){
     	memset(buf, 0, BUFF_LEN);
     	len = sizeof(router_addr);
     	count = recvfrom(fd, buf, BUFF_LEN, 0, (struct sockaddr*)&router_addr, &len);
-    		
-    	if(count == -1){
+        if(count == -1){
     		printf("client recieve data fail!\n");
     		return;
     	}else{
@@ -193,7 +192,6 @@ void rcv_UDPpacket(int fd){
     printf("end recieve\n");
 }
 
-// ==================== TCP 傳送 Thread ====================
 // ==================== TCP 傳送 Thread ====================
 void *tcp_socket(void *argu){
 	int client_fd;
@@ -234,37 +232,71 @@ void *tcp_socket(void *argu){
 }
 
 // ==================== UDP 接收 Thread ====================
-// ==================== UDP 接收 Thread ====================
+// !!!!! 請使用這個新版本替換 client.cpp 中舊的函式 !!!!!
 void *udp_socket(void *argu){
-	int client_fd;
-    struct sockaddr_in client_addr;
+    int client_fd;
+    struct sockaddr_in client_addr, router_addr;
+    char buf[BUFF_LEN];
+    socklen_t len = sizeof(router_addr);
+    ssize_t n;
+    int cnt = 0;
 
     // 1. 建立 UDP socket
     client_fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if(client_fd < 0){
+    if (client_fd < 0) {
         perror("create socket fail");
         return NULL;
     }
-    
+
     // 2. 綁定 Client 的位址和埠號，以便接收封包
     memset(&client_addr, 0, sizeof(client_addr));
     client_addr.sin_family = AF_INET;
-    client_addr.sin_port = htons(CLIENTTWO_PORT); // 綁定自己要監聽的埠號
+    client_addr.sin_port = htons(CLIENTTWO_PORT); // 綁定自己要監聽的埠號 9003
     client_addr.sin_addr.s_addr = htonl(INADDR_ANY); // 接收來自任何 IP 的封包
 
-    if(bind(client_fd, (struct sockaddr*)&client_addr, sizeof(client_addr)) < 0){
+    if (bind(client_fd, (struct sockaddr*)&client_addr, sizeof(client_addr)) < 0) {
         perror("bind fail");
         close(client_fd);
         return NULL;
     }
-    
-    // 3. 呼叫接收函式
-    rcv_UDPpacket(client_fd);
 
-    // 4. 關閉 socket
+    // 3. 設定 5 秒的接收超時 (Receive Timeout)
+    struct timeval timeout;
+    timeout.tv_sec = 5;  // 5 秒
+    timeout.tv_usec = 0; // 0 微秒
+    if (setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+        perror("setsockopt for timeout failed");
+    }
+
+    // 4. 迴圈接收封包，最多接收 20 個
+    while (cnt < 20) {
+        memset(buf, 0, BUFF_LEN);
+        n = recvfrom(client_fd, buf, BUFF_LEN, 0, (struct sockaddr*)&router_addr, &len);
+        
+        if (n > 0) {
+            // 如果成功收到封包 (n > 0)
+            cnt++;
+            printf("client rcv UDP packet %d !\n", cnt);
+
+            // 解析並印出 payload
+            const int header_total_size = sizeof(MACHeader) + sizeof(IPHeader) + sizeof(UDPHeader);
+            if (n > header_total_size) {
+                int payload_len = n - header_total_size;
+                char payload_str[payload_len + 1];
+                memcpy(payload_str, buf + header_total_size, payload_len);
+                payload_str[payload_len] = '\0'; // 加上 C 字串結束符號
+            }
+        } else {
+            // 如果接收失敗或超時 (n <= 0)
+            printf("UDP receive timed out or failed. Exiting UDP thread.\n");
+            break; // 跳出 while 迴圈，結束此執行緒
+        }
+    }
+
+    // 5. 迴圈結束後，釋放資源
+    printf("end receive\n");
     close(client_fd);
-		
-	return NULL;
+    return NULL;
 }
 
 // ==================== main ====================

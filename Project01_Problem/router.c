@@ -14,10 +14,10 @@
 
 #define CLIENT_IP "127.0.0.1"
 #define SERVER_IP "127.0.0.1"
-#define SERVER_PORT 9000//code
-#define ROUTER_PORT 9001//code
-#define CLIENT_PORT 9002//code
-#define CLIENTTWO_PORT 9003//code
+#define SERVER_PORT 9000
+#define ROUTER_PORT 9001
+#define CLIENT_PORT 9002
+#define CLIENTTWO_PORT 9003
 #define SA struct sockaddr
 
 // ==================== 封包結構定義 ====================
@@ -32,7 +32,7 @@ typedef struct IPHeader{
     uint16_t header_checksum;
     uint32_t source_ip;
     uint32_t destination_ip;
-    uint32_t options; // router 有多一個 options 欄位
+    //uint32_t options; // router 有多一個 options 欄位
 }IPHeader;
 
 typedef struct UDPHeader {
@@ -53,10 +53,9 @@ typedef struct Packet {
   struct IPHeader ipheader;
   struct UDPHeader udpheader;
   struct MACHeader macheader;
-  char buffer[MTU - 28];
+  char buffer[MTU - 46];//原本是28
 }Packet;
 
-// ==================== TCP 轉發 Thread ====================
 // ==================== TCP 轉發 Thread ====================
 void *tcp_socket(void *argu) {
     int listen_fd, client_conn_fd, server_fd;
@@ -126,7 +125,6 @@ void *tcp_socket(void *argu) {
 }
 
 // ==================== UDP 轉發 Thread ====================
-// ==================== UDP 轉發 Thread ====================
 void *udp_socket(void *argu) {
     int router_fd;
     struct sockaddr_in router_addr, server_addr, client_addr;
@@ -160,13 +158,19 @@ void *udp_socket(void *argu) {
     client_addr.sin_port = htons(CLIENTTWO_PORT); // Client 的接收埠號 9003
 
     // 4. 迴圈接收並轉發
-    while (1) {
+    int packet_count = 0;
+    while (packet_count < 20) {
+        packet_count++;
         server_addr_len = sizeof(server_addr);
         n = recvfrom(router_fd, buf, BUFF_LEN, 0, (struct sockaddr*)&server_addr, &server_addr_len);
         if (n > 0) {
-            printf("get udp\n");
+            // ***** 修改點：在字串結尾加上 \n *****
+            printf("get udp\n"); 
+            
             // 將收到的封包 (存在 buf 中) 直接轉發給 client
             sendto(router_fd, buf, n, 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
+            
+            // ***** 修改點：在字串結尾加上 \n *****
             printf("send udp\n");
         }
     }
