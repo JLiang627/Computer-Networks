@@ -1,7 +1,7 @@
 # Computer Networks / 計算機網路
 
 A repository for Computer Networks course (EE5310) homework and programming exercises.
-計算機網路課程作業與程式練習倉庫。
+計算機網路課程作業與程式練習。
 
 ## Language / 語言選擇
 
