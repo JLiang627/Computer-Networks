@@ -4,7 +4,7 @@ This repository contains all projects and programming exercises for the **Comput
 
 > **中文版說明請見**: [README_zh-TW.md](./README_zh-TW.md)
 
-## 📚 Course Information
+##  Course Information
 
 - **Course Name**: Computer Networks
 - **Course Code**: EE5310
@@ -15,7 +15,7 @@ This repository contains all projects and programming exercises for the **Comput
 - **Credits**: 3
 - **Course Type**: Elective
 
-## 📂 Repository Structure
+##  Repository Structure
 
 ```
 Computer-Networks/
@@ -30,13 +30,13 @@ Computer-Networks/
 │   ├── router.c         # Advanced router features
 │   └── script.sh        # Testing scripts
 ```
-## 📧 Contact
+##  Contact
 
 - **Author**: JLiang627
 - **Email**: a0979652527@icloud.com
 - **GitHub**: [@JLiang627](https://github.com/JLiang627)
 
-## 📄 License
+##  License
 
 This repository is for educational purposes only. Please respect academic integrity policies.
 
